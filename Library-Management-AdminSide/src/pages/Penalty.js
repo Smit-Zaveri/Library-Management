@@ -13,7 +13,7 @@ import {
   Typography,
   Button,
 } from "@mui/material";
-import { firestore, Timestamp } from "../services/firebase";
+import { firestore } from "../services/firebase";
 
 const PenaltyPage = () => {
   const [books, setBooks] = useState([]);
@@ -93,22 +93,6 @@ const PenaltyPage = () => {
   const handleRowsPerPageChange = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-  };
-
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
-    const date =
-      timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleString("en-IN", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      second: "numeric",
-      timeZoneName: "short",
-    });
   };
 
   const clearPenalty = async (bookId) => {

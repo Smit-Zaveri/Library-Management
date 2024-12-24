@@ -16,16 +16,20 @@ import {
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import GroupIcon from "@mui/icons-material/Group";
 import PlaylistAddCheckIcon from "@mui/icons-material/PlaylistAddCheck";
-import { getFirestore, collection, getDocs, query, where } from "firebase/firestore";
+import { getFirestore, collection, getDocs } from "firebase/firestore";
 
 const Dashboard = () => {
   const [totalBooks, setTotalBooks] = useState(0); // State for total books
-  const [totalBooksIssuedToday, setTotalBooksIssuedToday] = useState(0); // Books issued today
+  const [totalBooksIssuedToday, setTotalBooksIssuedToday] = useState({
+    issued: 0, // Books issued today
+    borrowed: 0, // Books borrowed today
+  });
   const [totalVisitorsToday, setTotalVisitorsToday] = useState(0); // Visitors today
   const [users, setUsers] = useState([]); // Users for "User of the Week"
   const [page, setPage] = useState(0); // Current page
   const [rowsPerPage, setRowsPerPage] = useState(5); // Rows per page
   const [userNames, setUserNames] = useState({}); // Store user names by email
+  const [totalUsers, setTotalUsers] = useState(0); // Total number of users
 
   const db = getFirestore();
 
@@ -33,25 +37,38 @@ const Dashboard = () => {
     const fetchData = async () => {
       try {
         const today = new Date().toISOString().split("T")[0]; // Get today's date (YYYY-MM-DD)
-  
+
         // Fetch books collection
         const bookCollection = collection(db, "books");
         const bookSnapshot = await getDocs(bookCollection);
         setTotalBooks(bookSnapshot.size);
-  
+
         // Fetch book-issues collection
         const issueCollection = collection(db, "book-issues");
         const issueSnapshot = await getDocs(issueCollection);
-        const booksIssuedToday = issueSnapshot.docs.filter((doc) => {
+        let booksIssuedToday = 0;
+        let booksBorrowedToday = 0;
+
+        // Count books issued and borrowed today
+        issueSnapshot.docs.forEach((doc) => {
           const data = doc.data();
           const inTime = data.inTime?.toDate(); // Convert Firestore timestamp to JavaScript Date
-          const outTime = data.outTime?.toDate();
-          
-          // Check if the book was issued today (by checking the inTime field)
-          return inTime && inTime.toISOString().split("T")[0] === today && data.userStatus === "Reading";
-        }).length;
-        setTotalBooksIssuedToday(booksIssuedToday);
-  
+
+          if (inTime && inTime.toISOString().split("T")[0] === today) {
+            if (data.userStatus === "Reading") {
+              booksIssuedToday += 1; // Increment issued books count
+            }
+            if (data.userStatus === "Borrowed") {
+              booksBorrowedToday += 1; // Increment borrowed books count
+            }
+          }
+        });
+
+        setTotalBooksIssuedToday({
+          issued: booksIssuedToday,
+          borrowed: booksBorrowedToday,
+        });
+
         // Fetch entry-log collection (Visitors today)
         const entryLogCollection = collection(db, "entry-log");
         const entryLogSnapshot = await getDocs(entryLogCollection);
@@ -61,35 +78,50 @@ const Dashboard = () => {
           return inTime && inTime.toISOString().split("T")[0] === today;
         }).length;
         setTotalVisitorsToday(visitorsToday);
-  
-        // Fetch users for "User of the Week"
-        const userCollection = collection(db, "users");
-        const userSnapshot = await getDocs(userCollection);
-        const userData = userSnapshot.docs.map((doc) => doc.data());
 
-        // Now, fetch data from the book-issues and book-borrow collections
-        const bookIssueCollection = collection(db, "book-issues");
+        const currentDate = new Date();
+        const startOfWeek = new Date(
+          currentDate.setDate(currentDate.getDate() - currentDate.getDay())
+        ); // Get the start of the current week (Sunday)
+        startOfWeek.setHours(0, 0, 0, 0); // Set time to 00:00:00 for comparison
+
+        // Fetch book-borrow collection
         const bookBorrowCollection = collection(db, "book-borrow");
-        const issueDocs = await getDocs(bookIssueCollection);
-        const borrowDocs = await getDocs(bookBorrowCollection);
+        const borrowSnapshot = await getDocs(bookBorrowCollection);
 
         // Initialize a user activity map
         let userActivity = {};
 
         // Process book-issue data (track issued books)
-        issueDocs.forEach((doc) => {
+        issueSnapshot.forEach((doc) => {
           const data = doc.data();
+          const inTime = data.inTime?.toDate(); // Convert Firestore timestamp to JavaScript Date
           const userId = data.email;
-          userActivity[userId] = userActivity[userId] || { issued: 0, borrowed: 0 };
-          userActivity[userId].issued += 1; // Increment issued book count
+
+          if (inTime && inTime >= startOfWeek) {
+            // Check if the issued book is within the current week
+            userActivity[userId] = userActivity[userId] || {
+              issued: 0,
+              borrowed: 0,
+            };
+            userActivity[userId].issued += 1; // Increment issued book count
+          }
         });
 
         // Process book-borrow data (track borrowed books)
-        borrowDocs.forEach((doc) => {
+        borrowSnapshot.forEach((doc) => {
           const data = doc.data();
+          const inTime = data.inTime?.toDate(); // Convert Firestore timestamp to JavaScript Date
           const userId = data.email;
-          userActivity[userId] = userActivity[userId] || { issued: 0, borrowed: 0 };
-          userActivity[userId].borrowed += 1; // Increment borrowed book count
+
+          if (inTime && inTime >= startOfWeek) {
+            // Check if the borrowed book is within the current week
+            userActivity[userId] = userActivity[userId] || {
+              issued: 0,
+              borrowed: 0,
+            };
+            userActivity[userId].borrowed += 1; // Increment borrowed book count
+          }
         });
 
         // Convert the userActivity map to an array of users with their counts
@@ -99,32 +131,35 @@ const Dashboard = () => {
         }));
 
         // Sort the users based on the total books issued + borrowed
-        usersWithActivity.sort((a, b) => (b.issued + b.borrowed) - (a.issued + a.borrowed));
+        usersWithActivity.sort(
+          (a, b) => b.issued + b.borrowed - (a.issued + a.borrowed)
+        );
 
         // Get top 5 users
         const topUsers = usersWithActivity.slice(0, 5);
 
         setUsers(topUsers);
+        setTotalUsers(usersWithActivity.length);
 
         // Fetch student names from the students collection
         const studentCollection = collection(db, "students");
         const studentSnapshot = await getDocs(studentCollection);
-        
+
         const nameMap = {};
         studentSnapshot.docs.forEach((doc) => {
           const student = doc.data();
           nameMap[student.email] = student.name; // Map email to student name
         });
-        
+
         setUserNames(nameMap); // Set the user names in state
       } catch (error) {
         console.error("Error fetching data:", error);
       }
     };
-  
+
     fetchData();
   }, [db]);
-  
+
   // Handle pagination
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
@@ -137,7 +172,11 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ padding: { xs: 2, sm: 4 } }}>
-      <Typography variant="h4" gutterBottom sx={{ textAlign: "center", fontWeight: "bold" }}>
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{ textAlign: "center", fontWeight: "bold" }}
+      >
         📚 Dashboard
       </Typography>
       <Grid container spacing={4}>
@@ -168,7 +207,7 @@ const Dashboard = () => {
           </Paper>
         </Grid>
 
-        {/* Books Issued Today */}
+        {/* Books Issued and Borrowed Today */}
         <Grid item xs={12} sm={6} md={4}>
           <Paper
             elevation={4}
@@ -186,10 +225,10 @@ const Dashboard = () => {
             <GroupIcon sx={{ fontSize: 50 }} />
             <Box sx={{ textAlign: "center" }}>
               <Typography variant="subtitle1" color="inherit">
-                Books Issued Today
+                Books Issued / Borrowed Today
               </Typography>
               <Typography variant="h4" fontWeight="bold">
-                {totalBooksIssuedToday}
+                {totalBooksIssuedToday.issued + totalBooksIssuedToday.borrowed}
               </Typography>
             </Box>
           </Paper>
@@ -228,7 +267,11 @@ const Dashboard = () => {
         <Typography variant="h5" sx={{ fontWeight: "bold", marginBottom: 2 }}>
           🌟 User's of the Week
         </Typography>
-        <TableContainer component={Paper} elevation={3} sx={{ borderRadius: "12px" }}>
+        <TableContainer
+          component={Paper}
+          elevation={3}
+          sx={{ borderRadius: "12px" }}
+        >
           <Table>
             <TableHead>
               <TableRow>
@@ -248,14 +291,18 @@ const Dashboard = () => {
             </TableHead>
             <TableBody>
               {users.length > 0 ? (
-                users.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((user, index) => (
-                  <TableRow key={index}>
-                    <TableCell align="center">{userNames[user.userId] || user.userId}</TableCell>
-                    <TableCell align="center">{user.userId}</TableCell>
-                    <TableCell align="center">{user.borrowed}</TableCell>
-                    <TableCell align="center">{user.issued}</TableCell>
-                  </TableRow>
-                ))
+                users
+                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                  .map((user, index) => (
+                    <TableRow key={index}>
+                      <TableCell align="center">
+                        {userNames[user.userId] || user.userId}
+                      </TableCell>
+                      <TableCell align="center">{user.userId}</TableCell>
+                      <TableCell align="center">{user.borrowed}</TableCell>
+                      <TableCell align="center">{user.issued}</TableCell>
+                    </TableRow>
+                  ))
               ) : (
                 <TableRow>
                   <TableCell align="center" colSpan={4}>
@@ -274,6 +321,7 @@ const Dashboard = () => {
             rowsPerPage={rowsPerPage}
             onRowsPerPageChange={handleRowsPerPageChange}
             rowsPerPageOptions={[5, 10, 20]}
+            count={totalUsers} // Use the totalUsers state for the count
             sx={{ marginTop: 2 }}
           />
         </TableContainer>

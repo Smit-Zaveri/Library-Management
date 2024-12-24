@@ -9,7 +9,6 @@ import Form from "./components/BookForm";
 import StudentForm from "./components/StudentForm";
 import BookUpload from "./components/BookAddCsv";
 import StudentUpload from "./components/StudentAddCsv";
-import AuthorForm from "./components/AuthorForm";
 import CollectionForm from "./components/CollectionForm";
 import Login from "./pages/Login";
 
@@ -27,7 +26,8 @@ export const routes = (user) => [
   { path: "/edit-student/:id", element: user ? <StudentForm /> : <Login /> },
   { path: "/add-book-csv", element: user ? <BookUpload /> : <Login /> },
   { path: "/add-student-csv", element: user ? <StudentUpload /> : <Login /> },
-  { path: "/author-form", element: user ? <AuthorForm /> : <Login /> },
+  // { path: "/author-form", element: user ? <AuthorForm /> : <Login /> },
+  { path: "/author-form", element: user ? <CollectionForm collectionName="authors" /> : <Login /> },
   { path: "/categories", element: user ? <CollectionForm collectionName="categories" /> : <Login /> },
   { path: "/types", element: user ? <CollectionForm collectionName="types" /> : <Login /> },
 ];

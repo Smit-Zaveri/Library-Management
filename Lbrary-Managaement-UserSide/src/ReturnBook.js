@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,
   Button,
@@ -10,12 +10,11 @@ import {
   TableRow,
   Checkbox,
   TableContainer,
-  TablePagination,
-  Select,
-  MenuItem,
+  CircularProgress,
   FormControl,
   InputLabel,
-  CircularProgress,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { collection, query, where, getDocs, updateDoc, doc, Timestamp, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
@@ -25,16 +24,30 @@ const ReturnBook = () => {
   const [issuedBooks, setIssuedBooks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedBooks, setSelectedBooks] = useState([]);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
-  const [returnType, setReturnType] = useState("Reading");
+  const [returnType, setReturnType] = useState("");
+  const [alert, setAlert] = useState(null); 
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchIssuedBooks();
-  }, [returnType]);
+  // Calculate penalty if the book is returned late
+  const checkPenaltyForBorrowing = useCallback(async (bookId, returnDate) => {
+    const currentDate = new Date();
+    const returnDateObj = returnDate instanceof Timestamp ? returnDate.toDate() : new Date(returnDate);
+    const timeDifference = currentDate - returnDateObj;
+    const daysLate = Math.floor(timeDifference / (1000 * 3600 * 24));
+    let penalty = 0;
 
-  const fetchIssuedBooks = async () => {
+    if (daysLate > 0) {
+      const lateDays = Math.min(daysLate, 10);
+      penalty = lateDays * 10; // Rs 10 per day
+      const bookRef = doc(db, "book-borrow", bookId);
+      await updateDoc(bookRef, { penalty });
+    }
+
+    return penalty;
+  }, []); // No dependencies required here
+
+  // Fetch issued books from the database
+  const fetchIssuedBooks = useCallback(async () => {
     setLoading(true);
     const user = JSON.parse(localStorage.getItem("user"));
     const collectionName = returnType === "Reading" ? "book-issues" : "book-borrow";
@@ -49,6 +62,7 @@ const ReturnBook = () => {
       ...doc.data(),
     }));
 
+    // Calculate penalties for borrowing books
     for (const book of books) {
       const returnDate = book.returnDate;
       if (returnType === "Borrowing" && returnDate) {
@@ -59,36 +73,26 @@ const ReturnBook = () => {
 
     setIssuedBooks(books);
     setLoading(false);
-  };
+  }, [returnType, checkPenaltyForBorrowing]); // Added checkPenaltyForBorrowing as a dependency
 
-  const checkPenaltyForBorrowing = async (bookId, returnDate) => {
-    const currentDate = new Date();
-    const returnDateObj = returnDate instanceof Timestamp ? returnDate.toDate() : new Date(returnDate);
-    const timeDifference = currentDate - returnDateObj;
-    const daysLate = Math.floor(timeDifference / (1000 * 3600 * 24));
-    let penalty = 0;
+  // Fetch books when the component mounts or returnType changes
+  useEffect(() => {
+    fetchIssuedBooks();
+  }, [fetchIssuedBooks, returnType]); // Re-fetch when returnType changes
 
-    if (daysLate > 0) {
-      const lateDays = daysLate <= 10 ? daysLate : 10;
-      penalty = lateDays * 10;  // Rs 10 per day
-      const bookRef = doc(db, "book-borrow", bookId);
-      await updateDoc(bookRef, { penalty });
-    }
-
-    return penalty;
-  };
-
+  // Handle checkbox selection for books to be returned
   const handleCheckboxChange = (event, bookId) => {
-    if (event.target.checked) {
-      setSelectedBooks([...selectedBooks, bookId]);
-    } else {
-      setSelectedBooks(selectedBooks.filter((id) => id !== bookId));
-    }
+    setSelectedBooks((prevSelected) =>
+      event.target.checked
+        ? [...prevSelected, bookId]
+        : prevSelected.filter((id) => id !== bookId)
+    );
   };
 
+  // Handle return action for selected books
   const handleReturnClick = async () => {
     if (selectedBooks.length === 0) {
-      alert("Please select at least one book to return.");
+      showAlert("Please select at least one book to return.", "error");
       return;
     }
 
@@ -100,18 +104,23 @@ const ReturnBook = () => {
     if (bookWithPenalty) {
       const penaltyPaidToday = await checkPenaltyPaymentToday(selectedBooks);
       if (!penaltyPaidToday) {
-        alert("You cannot return books with a penalty until the penalty is cleared.");
+        showAlert("You cannot return books with a penalty until the penalty is cleared.", "error");
         return;
       }
     }
 
-    captureAndReturnBooks();
-    navigate("/");
+    await captureAndReturnBooks();
+
+    // Show success message and redirect after delay
+    showAlert("Books returned successfully!", "success");
+    setTimeout(() => {
+      navigate("/"); // Navigate after success
+    }, 2000); // 2000ms = 2 seconds
   };
 
-  const captureAndReturnBooks = async () => {
+  // Capture and update the return process in the database
+  const captureAndReturnBooks = useCallback(async () => {
     const collectionName = returnType === "Reading" ? "book-issues" : "book-borrow";
-
     try {
       for (const bookId of selectedBooks) {
         const bookIssueRef = doc(db, collectionName, bookId);
@@ -143,23 +152,50 @@ const ReturnBook = () => {
       }
 
       setIssuedBooks(issuedBooks.filter((book) => !selectedBooks.includes(book.id)));
-      setSelectedBooks([]);
-      alert("Books returned successfully!");
+      setSelectedBooks([]); // Reset selected books
     } catch (err) {
       console.error("Error returning books:", err);
-      alert("Failed to return books.");
+      showAlert("Failed to return books.", "error");
     }
+  }, [returnType, selectedBooks, issuedBooks, checkPenaltyForBorrowing]); // Added checkPenaltyForBorrowing as a dependency
+
+  // Check if the penalty has been paid today
+  const checkPenaltyPaymentToday = async (selectedBooks) => {
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+    for (const bookId of selectedBooks) {
+      const bookRef = doc(db, "book-borrow", bookId);
+      const bookDoc = await getDoc(bookRef);
+
+      if (bookDoc.exists()) {
+        const penaltyPaidTimestamp = bookDoc.data().penaltyPaidTimestamp;
+        if (penaltyPaidTimestamp) {
+          const penaltyPaidDate = penaltyPaidTimestamp.toDate();
+          if (penaltyPaidDate >= startOfDay && penaltyPaidDate <= endOfDay) {
+            continue;
+          } else {
+            showAlert("The penalty for this book has not been paid today.", "error");
+            return false;
+          }
+        } else {
+          showAlert("No penalty payment record found for this book.", "error");
+          return false;
+        }
+      }
+    }
+
+    return true;
   };
 
-  const handlePageChange = (event, newPage) => {
-    setPage(newPage);
+  // Show alert messages
+  const showAlert = (message, type) => {
+    setAlert({ message, type });
+    setTimeout(() => setAlert(null), 3000); // Hide alert after 3 seconds
   };
 
-  const handleRowsPerPageChange = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
+  // Format the timestamp into a readable date string
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
     const date = timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
@@ -175,47 +211,11 @@ const ReturnBook = () => {
     });
   };
 
-  const checkPenaltyPaymentToday = async (selectedBooks) => {
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
-
-    for (const bookId of selectedBooks) {
-      const bookRef = doc(db, "book-borrow", bookId);
-      const bookDoc = await getDoc(bookRef);
-
-      if (bookDoc.exists()) {
-        const penaltyPaidTodayField = bookDoc.data().penaltyPaidToday;
-
-        if (penaltyPaidTodayField) {
-          await updateDoc(bookRef, { penalty: 0 });
-          continue;
-        } else {
-          const penaltyPaidTimestamp = bookDoc.data().penaltyPaidTimestamp;
-          if (penaltyPaidTimestamp) {
-            const penaltyPaidDate = penaltyPaidTimestamp.toDate();
-
-            if (penaltyPaidDate >= startOfDay && penaltyPaidDate <= endOfDay) {
-              continue;
-            } else {
-              alert("The penalty for this book has not been paid today.");
-              return false;
-            }
-          } else {
-            alert("No penalty payment record found for this book.");
-            return false;
-          }
-        }
-      }
-    }
-
-    return true;
-  };
-
+  // Show a loading spinner while data is being fetched
   if (loading) return <CircularProgress />;
 
   return (
-    <Box sx={{ padding: "2rem",  borderRadius: "8px" }}>
+    <Box sx={{ padding: "2rem", borderRadius: "8px" }}>
       <Typography variant="h4" gutterBottom sx={{ textAlign: "center", marginBottom: "1rem" }}>
         Return Issued Books
       </Typography>
@@ -226,18 +226,36 @@ const ReturnBook = () => {
           labelId="return-type-label"
           value={returnType}
           onChange={(e) => setReturnType(e.target.value)}
-          sx={{  borderRadius: "8px" }}
+          sx={{ borderRadius: "8px" }}
         >
-          <MenuItem value="Reading">Reading</MenuItem>
           <MenuItem value="Borrowing">Borrowing</MenuItem>
+          <MenuItem value="Reading">Reading</MenuItem>
         </Select>
       </FormControl>
+
+      {alert && (
+        <Box
+          sx={{
+            position: "fixed",
+            top: "20%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: alert.type === "success" ? "green" : "red",
+            color: "#fff",
+            padding: "1rem",
+            borderRadius: "8px",
+            textAlign: "center",
+          }}
+        >
+          {alert.message}
+        </Box>
+      )}
 
       {issuedBooks.length > 0 ? (
         <>
           <TableContainer sx={{ border: "1px solid #ddd", borderRadius: "8px", overflow: "hidden", marginBottom: "1rem" }}>
             <Table>
-              <TableHead sx={{}}>
+              <TableHead>
                 <TableRow>
                   <TableCell><strong>Book Title</strong></TableCell>
                   <TableCell><strong>ISBN</strong></TableCell>
@@ -248,9 +266,8 @@ const ReturnBook = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {issuedBooks.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((book) => {
+                {issuedBooks.map((book) => {
                   const penalty = book.penalty ? `₹${book.penalty}` : "No Penalty";
-
                   return (
                     <TableRow key={book.id}>
                       <TableCell>{book.bookTitle}</TableCell>
@@ -272,15 +289,7 @@ const ReturnBook = () => {
           </TableContainer>
 
           <Box sx={{ marginTop: 2, textAlign: "right" }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleReturnClick}
-              sx={{
-                
-                padding: "0.5rem 2rem",
-              }}
-            >
+            <Button variant="contained" color="primary" onClick={handleReturnClick}>
               Return Selected Books
             </Button>
           </Box>

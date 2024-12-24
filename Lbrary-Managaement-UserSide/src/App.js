@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   AppBar,
   Box,
-  CircularProgress,
   CssBaseline,
   Toolbar,
   Typography,
@@ -31,18 +30,12 @@ import ReturnBook from "./ReturnBook";
 import BorrowBooks from "./borrowBooks";
 import {
   db,
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
   updateDoc,
   doc,
 } from "./firebase";
 
 const App = ({ darkMode, toggleTheme }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const theme = useTheme();
   const navigate = useNavigate();
@@ -134,21 +127,6 @@ const App = ({ darkMode, toggleTheme }) => {
     </List>
   );
 
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-          background: theme.palette.background.default,
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: "flex", background: theme.palette.background.default }}>

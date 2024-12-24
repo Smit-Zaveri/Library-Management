@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   TextField,
   MenuItem,
@@ -19,7 +18,6 @@ import { db, collection, getDocs, query, where } from "./firebase";
 import BookCard from "./BookCard";
 import SearchIcon from "@mui/icons-material/Search";
 import ClearIcon from "@mui/icons-material/Clear";
-import { debounce } from "lodash";
 
 const App = ({ handleCartUpdate }) => {
   const [bookType, setBookType] = useState("");
@@ -104,8 +102,19 @@ const App = ({ handleCartUpdate }) => {
   }, []);
   
 
-  const handleSearch = useCallback(
-    debounce(async () => {
+  // Removed duplicate handleSearch function
+
+  const handleKeyPress = (event) => {
+    if (event.key === "Enter") {
+      handleSearch();
+    }
+  };
+
+  const handleBookTypeChange = (event) => {
+    setBookType(event.target.value);
+  };
+
+  const handleSearch = useCallback(async () => {
       if (!bookType && !searchText.trim()) {
         setFilteredBooks([]);
         return;
@@ -141,23 +150,11 @@ const App = ({ handleCartUpdate }) => {
       } finally {
         setLoading(false);
       }
-    }, 500),
-    [bookType, searchText]
-  );
-
-  const handleKeyPress = (event) => {
-    if (event.key === "Enter") {
-      handleSearch();
-    }
-  };
-
-  const handleBookTypeChange = (event) => {
-    setBookType(event.target.value);
-  };
+  }, [bookType, searchText]);
 
   useEffect(() => {
     handleSearch();
-  }, [bookType, searchText]);
+  }, [bookType, searchText, handleSearch]);
 
   const handleClearSearch = () => {
     setSearchText("");

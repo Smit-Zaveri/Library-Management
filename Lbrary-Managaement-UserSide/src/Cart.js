@@ -10,7 +10,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   IconButton,
   TablePagination,
   Snackbar,
@@ -170,24 +169,26 @@ const Cart = () => {
         sx={{ marginTop: 2 }}
       />
 
-      <Box textAlign="right" mt={4}>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleCheckout}
-          disabled={cartItems.length === 0}
-          sx={{ marginRight: 2 }}
-        >
-          Checkout
-        </Button>
-        <Button
-          variant="outlined"
-          color="secondary"
-          onClick={() => navigate("/borrowBooks")}
-        >
-          Book Issued
-        </Button>
-      </Box>
+        <Box textAlign="right" mt={4}>
+  <Button
+    variant="contained"
+    color="primary"
+    onClick={handleCheckout}
+    disabled={cartItems.length === 0} // Disable if no books in cart
+    sx={{ marginRight: 2 }}
+  >
+    Checkout
+  </Button>
+  <Button
+    variant="outlined"
+    color="secondary"
+    onClick={() => navigate("/borrowBooks")}
+    disabled={cartItems.length === 0} // Disable if no books in cart
+  >
+    Book Issued
+  </Button>
+</Box>
+
 
       <Snackbar
         open={openSnackbar}
