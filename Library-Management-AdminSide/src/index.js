@@ -18,13 +18,14 @@ import { Analytics } from '@vercel/analytics/react';
  * @returns {JSX.Element} The AppWrapper component.
  */
 const AppWrapper = () => {
-  const [darkMode, setDarkMode] = useState(false); // State for dark mode
+  // Default theme is dark
+  const [darkMode, setDarkMode] = useState(true); // Set default to true for dark mode
 
-  // Load theme preference from localStorage on mount
+  // Load theme preference from localStorage on mount, if available
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") {
-      setDarkMode(true);
+    if (savedTheme === "light") {
+      setDarkMode(false);
     }
   }, []);
 

@@ -11,9 +11,11 @@ import BookUpload from "./components/BookAddCsv";
 import StudentUpload from "./components/StudentAddCsv";
 import CollectionForm from "./components/CollectionForm";
 import Login from "./pages/Login";
+import Glob from "./pages/Glob";
 
 export const routes = (user) => [
-  { path: "/", element: user ? <Dashboard /> : <Login /> },
+  { path: "/dashboard", element: user ? <Dashboard /> : <Login /> },
+  { path: "/", element: <Glob /> },
   { path: "/reset-password", element: <ResetPassword /> },
   { path: "/book-borrow", element: user ? <BookBorrow /> : <Login /> },
   { path: "/penalty", element: user ? <Penalty /> : <Login /> },

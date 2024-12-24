@@ -67,7 +67,7 @@ const App = ({ darkMode, toggleTheme }) => {
   }, [navigate, location.pathname]);
 
   const navItems = [
-    { label: "Dashboard", path: "/", icon: <DashboardIcon /> },
+    { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
     { label: "Book List", path: "/books", icon: <BookIcon /> },
     { label: "Student List", path: "/students", icon: <SchoolIcon /> },
     { label: "Author", path: "/author-form", icon: <PersonIcon /> },
@@ -100,7 +100,8 @@ const App = ({ darkMode, toggleTheme }) => {
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
       {/* AppBar */}
-      <AppBar
+      {location.pathname !== "/" && (
+        <AppBar
         position="fixed"
         sx={{
           zIndex: theme.zIndex.drawer + 1,
@@ -147,11 +148,12 @@ const App = ({ darkMode, toggleTheme }) => {
               </IconButton>
             </Tooltip>
           )}
-        </Toolbar>
-      </AppBar>
+          </Toolbar>
+        </AppBar>
+      )}
 
       {/* Drawer for desktop */}
-      {user && !isMobile && (
+      {location.pathname !== "/" && user && !isMobile && (
         <Drawer
           variant="permanent"
           sx={{
@@ -170,12 +172,11 @@ const App = ({ darkMode, toggleTheme }) => {
         </Drawer>
       )}
 
-      {/* Drawer for mobile */}
-      {user && isMobile && (
+{user && isMobile && location.pathname !== "/" && (
         <Drawer
           variant="temporary"
           open={mobileOpen}
-          onClose={handleDrawerToggle}
+          onClose={() => setMobileOpen((prev) => !prev)}
           ModalProps={{ keepMounted: true }}
           sx={{
             "& .MuiDrawer-paper": {
